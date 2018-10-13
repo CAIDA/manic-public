@@ -1,0 +1,295 @@
+#!/usr/bin/env ruby
+
+#############################################################################
+## Measures the RTT of peering links to detect congestion.
+##
+## This uses a MIDAR-like "indirect" probing--that is, traceroute measurements
+## at fixed TTLs.
+##
+## --------------------------------------------------------------------------
+## Copyright (C) 2013 The Regents of the University of California.
+## 
+## This program is free software; you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation; either version 2 of the License, or
+## (at your option) any later version.
+## 
+## This program is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+## 
+## You should have received a copy of the GNU General Public License
+## along with this program; if not, write to the Free Software
+## Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+## 
+#############################################################################
+
+$: << File.dirname($0)
+
+$command_line = "tsp " + ARGV.join(" ")
+$0 = "tsp"
+
+require 'rubygems'
+require 'ostruct'
+require 'optparse'
+require 'socket'
+
+require 'arkutil/generalutils'
+require 'arkutil/processutils'
+require 'midar-probing-utils'
+require 'mperio'
+
+Thread.abort_on_exception = true
+
+$hostname = Socket::gethostname
+
+$options = OpenStruct.new
+$options.mper_port = 8888
+$options.debug_mperio = false
+
+opts = OptionParser.new
+
+opts.on("--targets", "=PATH",
+        "file with target information") do |v|
+  $options.target_path = v
+end
+
+opts.on("--log", "=PATH",
+        "mper command/result message log path") do |v|
+  $options.log_path = v
+end
+
+opts.on("--[no-]debug-mperio", TrueClass,
+        "enable MperIO debug messages (#{$options.debug_mperio})") do |v|
+  $options.debug_mperio = v
+end
+
+opts.on("--mper-port", "=NUM", Integer,
+	"control socket port (#{$options.mper_port})") do |v|
+  $options.mper_port = v
+end
+
+opts.on("-v", "--[no-]verbose", TrueClass,  "show detailed progress") do |v|
+  $options.verbose = v
+end
+
+begin
+  ARGV.replace opts.parse(*ARGV)
+rescue OptionParser::ParseError
+  $stderr.puts "ERROR: " + $!.to_s
+  $stderr.puts opts
+  exit 1
+end
+
+unless $options.target_path
+  $stderr.puts "ERROR: missing --targets argument"
+  $stderr.puts opts
+  exit 1
+end
+
+unless $options.log_path
+  t = Time.now.gmtime
+  $options.log_path = sprintf "tsp.%s.%d.log", t.strftime("%Y%m%d"), t.to_i
+end
+
+
+#===========================================================================
+
+Signal.trap("TERM") do
+  $stderr.puts "exiting on SIGTERM"
+  exit 2
+end
+
+Signal.trap("INT")  do
+  $stderr.puts "exiting on SIGINT"
+  exit 2
+end
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+def log_failure(msg)
+  path = "/tmp/tsp-failed.#{Time.now.to_i}.#{$$}"
+  File.open(path, "w") do |file|
+    file.puts msg
+  end
+end
+
+
+#============================================================================
+
+class TargetFile
+
+  attr_reader :target, :source, :destination, :target_hop, :terminal_hop
+  attr_reader :checksum
+  attr_accessor :debug
+
+  def initialize(target_path)
+    @target_path = target_path
+    @target_io = File.open target_path
+    @done = false
+  end
+
+  def next_target
+    return nil if @done
+    loop do
+      line = @target_io.gets
+      if line
+        next if line =~ /^\#/ || line =~ /^\s*$/
+        fields = line.split
+        unless fields.length == 6
+          $stderr.printf "malformed line in '%s': %s\n", @target_path, line
+          exit 1
+        end
+
+        # Input fields:
+        #  0:target  1:src  2:dest  3:target_hop  4:terminal_hop  5:checksum
+        @target = fields[0]
+        @source = fields[1]
+        @destination = fields[2]
+        @target_hop = fields[3].to_i
+        @terminal_hop = fields[4].to_i
+        @checksum = fields[5].to_i
+
+        # XXX Ugly hack to deal with target at hop 1 to which we don't have
+        #     a route.  Normally this shouldn't happen but it does for
+        #     vie-at (78.41.115.129), eug-us (128.223.157.2 & .3),
+        #     hel-fi (195.148.124.65), and scl-cl (200.27.115.1).
+        #
+        # 2012-07-26: Not sure this matters anymore, and skipping a target
+        #             might cause problems, so this now only prints out a
+        #             notice.
+        if @target_hop == 1
+          $stderr.printf "note: possibly unreachable target %s at hop 1: %s\n",
+            @target, line.chomp
+        end
+
+        return line
+      else
+        @done = true
+        return nil
+      end
+    end
+  end
+
+end
+
+
+#===========================================================================
+
+class CongestionProber
+
+  attr_accessor :debug_mperio
+
+  def initialize(mperio, target_path)
+    @mperio = mperio
+    @mperio.delegate = self
+
+    @targets = TargetFile.new target_path
+    @target_id = TargetID.new
+
+    @active_measurements = {}
+    @scheduled_all_probes = false  # whether we ... from target file
+  end
+
+
+  def start
+    puts "# " + $command_line
+
+    run_start = Time.now
+    printf "## run started %s (%d)\n", run_start.to_s, run_start.to_i
+
+    @mperio.start()  # blocks til all probing finishes (@mperio.suspend called)
+
+    run_end = Time.now
+    printf "## run finished %s (%d) in %f secs\n", run_end.to_s,
+      run_end.to_i, run_end - run_start
+  end
+
+
+  private # =================================================================
+
+  def clear_measurement(target_id)
+    @active_measurements.delete target_id
+    @mperio.suspend() if @scheduled_all_probes && @active_measurements.empty?
+  end
+
+
+  def mperio_on_more
+    $stderr.puts "more" if @debug_mperio
+
+    line = @targets.next_target()
+    if line
+      # unless @targets.destination == "0.0.0.0"
+      terminal_hop = 255
+      strategy = IndirectProbingStrategy.new nil, @targets.target,
+        @targets.destination, @targets.target_hop, terminal_hop,
+        @targets.checksum
+
+      @active_measurements[@target_id.id] = strategy
+      strategy.execute_probe @mperio, @target_id.id
+      @target_id.advance()
+    else
+      @scheduled_all_probes = true
+      @mperio.suspend() if @active_measurements.empty?
+    end
+  end
+
+
+  def mperio_on_data(result)
+    target_id = result.reqnum
+    strategy = @active_measurements[target_id]
+    if strategy
+      if strategy.handle_result @mperio, result
+        strategy.execute_probe @mperio, target_id
+      else
+        clear_measurement target_id
+      end
+    else
+      $stderr.printf "on_data called for target_id %d which isn't active\n",
+        target_id
+    end
+  end
+
+
+  def mperio_on_error(target_id, message)
+    $stderr.printf "error for target_id %d: %s\n", target_id, message
+    clear_measurement target_id
+  end
+
+
+  def mperio_on_send_error(target_id, message)
+    # XXX output something? a fake non-response result line?
+    $stderr.printf "send error for target_id %d: %s\n", target_id, message
+    clear_measurement target_id
+  end
+
+
+  def mperio_service_failure(message)
+    $stderr.printf "service failure: %s\n", message
+    # XXX handle?
+    exit 1
+  end
+
+end
+
+
+#############################################################################
+# MAIN
+#############################################################################
+
+begin
+  mperio = MperIO.new $options.mper_port, $options.log_path
+  prober = CongestionProber.new mperio, $options.target_path
+  prober.debug_mperio = $options.debug_mperio
+  prober.start()
+  mperio.stop()
+
+rescue
+  short_msg = $!.class.name + ": " + $!.to_s
+  msg = sprintf "CongestionProber: exiting on uncaught exception " +
+    "at top-level: %p; backtrace: %s", $!, $!.backtrace.join(" <= ")
+  $stderr.puts msg
+  log_failure msg rescue nil
+  exit 1
+end
