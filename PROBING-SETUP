@@ -1,85 +1,126 @@
-# Setting up bdrmap
+----------------------------------------------------------------------
+Setting up bdrmap
+----------------------------------------------------------------------
 
-sc_bdrmap is packaged with the active measurement tool scamper. Download and install scamper using the instructions at:
+sc_bdrmap is packaged with the active measurement tool
+scamper. Download and install scamper using the instructions at:
 https://www.caida.org/tools/measurement/scamper/
 
-The probing module of sc_bdrmap runs on the monitor. It needs the following inputs:
-1) A list of sibling ASes of the network hosting the vantage point. Put these in a file, one per line
-
-2) A prefix-AS file in the format provided by CAIDA's prefix-AS files: 
+The probing module of sc_bdrmap runs on the monitor. It needs the
+following inputs:
+1) A list of sibling ASes of the network hosting the vantage
+point. Put these in a file, one per line
+2) A prefix-AS file in the format provided by CAIDA's prefix-AS files:
 <prefix> <prefix_length> <ASN>
-
-3) A 2-byte checksum value for the ICMP echo probes. This checksum value should be kept constant across consecutive runs of sc_bdrmap to ensure that we are measuring the same forward path each time. 
-
+3) A 2-byte checksum value for the ICMP echo probes. This checksum
+value should be kept constant across consecutive runs of sc_bdrmap to
+ensure that we are measuring the same forward path each time.
 4) A list of prefixes corresponding to IXPs in the following format:
 <prefix> <IXP_name>
 
-To run it on the monitor:
+To run bdrmap on the monitor:
 
 First start scamper:
 sudo scamper -D -p <packet_rate> -P <scamper_port>;
 
 sc_bdrmap -a <prefix2as_file> -v <sibling_file> -x <peering_file> -C <checksum> -p <scamper_port> -o <warts_file> > <logfile> 2>&1
 
-# Probing update process
+----------------------------------------------------------------------
+Probing update process
+----------------------------------------------------------------------
 
-Once bdrmap is set up to do the probing, we need to process the warts files to produce a target probing list. 
+Once bdrmap is set up to do the probing, we need to process the warts
+files to produce a target probing list.
 
-First use boostrap-mon-bdrmap.bash to set up the all the needed directories and databases required for the probing update process to run.
-
-incoming bdrmap warts files should be placed in the directory bdrmap-state/warts/current for the monitor. 
-
-The script run_periodic_upd_lnk.bash is responsible for parsing the warts file to produce target lists. It generates a number of intermediate files and uses a SQLITE database to keep track of probing state. 
-
-You will need to provide the locations and the current versions of the following files for the script to run:
+You will need to provide the locations and the current versions of the
+following files for the script to run. This is done in the config.bash
+file. Current paths that are used on the CAIDA system are included
+there as reference. You will need to change those. 
 1) AS relationships file
-
 2) ipv4 delegations file
-
 3) prefix2as file (same as the one used in the bdrmap probing phase)
-
 4) peering prefixes file (same as the one used in the bdrmap probing phase)
-
 5) VP siblings file (same as the one used in the bdrmap probing phase)
-
 6) checksum value (same as the one used in the bdrmap probing phase)
+7) location of code
 
-The locations where you need to specify these files should be evident in the run_periodic_upd_lnk.bash script. Someday I will make this script use a config file. 
+First use boostrap-mon-bdrmap.bash to set up the all the needed
+directories and databases required for the probing update process to
+run.
+
+boostrap-mon-bdrmap.bash <monitor_name>
+
+incoming bdrmap warts files should be placed in the directory
+bdrmap-state/warts/current for the monitor.
+
+The script run_periodic_upd_lnk.bash is responsible for parsing the
+warts file to produce target lists (among many other things). It
+generates a number of intermediate files and uses a SQLITE database to
+keep track of probing state.
+
+Usage for run_periodic_upd_lnk.bash:
+run_periodic_upd_lnk.bash <monitor> <ONEOFF>
+
+The probing update process can run in two modes: when the ONEOFF
+parameter is 1, it processes a warts file to produce the probing list
+based only off that snapshot.
+
+When ONEOFF paramter is 0, we assume that this is running in
+continouous mode, and 
 
 To obtain a one-off probing target list, use:
 run_periodic_upd_lnk.bash <MON> 1
-(second parameters is "oneoff")
-This will use the latest bdrmap warts file in the bdrmap-state/warts/current directory, and produce a probe list. It will update the SQLITE database with various info. It will produce two versions of the target list for two different probers that can be used in the probing phase (see next section). 
 
-To set up the probing update process to process new bdrmap files as they are generated (continuous mode), run this periodically with the "oneoff" parameter set to 0. 
+This will use the latest bdrmap warts file in the
+bdrmap-state/warts/current directory, and produce a probe list. It
+will update the SQLITE database with various info. It will produce two
+versions of the target list for two different probers that can be used
+in the probing phase (see next section).
+
+To set up the probing update process to process new bdrmap files as
+they are generated (continuous mode), run this periodically with the
+"oneoff" parameter set to 0.  
 run_periodic_upd_lnk.bash <MON> 0
 
-Note that if the process is set up in continuous mode, it will require a history of 5 bdrmap runs in order to identify links to probe, as it requires links to be seen in at least 4 out of 5 previous bdrmap runs. This avoids misinferences due to occasional bdrmap problems, and ensures that the probing set is stable. 
+Note that if the process is set up in continuous mode, it will require
+a history of 5 bdrmap runs in order to identify links to probe, as it
+requires links to be seen in at least 4 out of 5 previous bdrmap
+runs. This avoids misinferences due to occasional bdrmap problems, and
+ensures that the probing set is stable. So the first few times you run
+run_periodic_upd_lnk.bash in continuous mode it will not generate any
+targets to probe. But if you persevere, you will be rewarded! :)
 
-# TSLP probing
+----------------------------------------------------------------------
+TSLP probing
+----------------------------------------------------------------------
 
 For probing, we have two options: 
 
-Option 1 uses a packet prober called mper. The source code is here: https://www.caida.org/tools/measurement/mper/downloads/mper-0.4.2.tar.gz
+Option 1 uses a packet prober called mper. The source code is here:
+https://www.caida.org/tools/measurement/mper/downloads/mper-0.4.2.tar.gz
 
 Run mper on the monitor as:
 mper -D 8888 -p 100 >/dev/null 2>&1
 
 This will run mper at 100 packets per second, listening on port 8888
 
-For probing, we use a Ruby program called tsp. The tsp program and "midar-probing-utils.rb" should be in the same directory. 
+For probing, we use a Ruby program called tsp. The tsp program and
+"midar-probing-utils.rb" should be placed in the same directory. These
+programs are found in the "tsp" directory of the github repo.
 
 tsp needs a file with targets, of the form:
 
 <target> <unused_field> <destination> <ttl> <unused_field, 0> <checksum>
-
+for example:
 69.139.234.89 foo 192.250.29.1 11 0 34606
-The probe target generation process described above will generate a .dot1.max3.targets file which is in the format that tsp needs
+The probe target generation process described above will generate a
+.dot1.max3.targets file which is in the format that tsp needs
 
 to run the probing for a target file, use:
-
 tsp --targets=<targets_file> --log=<log_file or /dev/null> > <out_file>
 
-Option 2 is to use the existing scamper process and connect to it using sc_attach. The probe target generation process creates a target file .scattach.targets in the format that sc_attach wants. 
+Option 2 is to use the existing scamper process and connect to it
+using sc_attach. The probe target generation process creates a target
+file .scattach.targets in the format that sc_attach wants.
 
 sc_attach -p <scamper_port> -i <scattach_targets_file> -Oimpatient -o <outfile>
