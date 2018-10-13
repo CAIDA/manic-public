@@ -25,6 +25,9 @@ sudo scamper -D -p <packet_rate> -P <scamper_port>;
 
 sc_bdrmap -a <prefix2as_file> -v <sibling_file> -x <peering_file> -C <checksum> -p <scamper_port> -o <warts_file> > <logfile> 2>&1
 
+Name the warts file in the format:
+<monitor_name>.<timestamp>.bdrmap.warts.gz
+
 ----------------------------------------------------------------------
 Probing update process
 ----------------------------------------------------------------------
@@ -59,7 +62,7 @@ generates a number of intermediate files and uses a SQLITE database to
 keep track of probing state.
 
 Usage for run_periodic_upd_lnk.bash:
-run_periodic_upd_lnk.bash <monitor> <ONEOFF>
+run_periodic_upd_lnk.bash <monitor_name> <ONEOFF>
 
 The probing update process can run in two modes: when the ONEOFF
 parameter is 1, it processes a warts file to produce the probing list
