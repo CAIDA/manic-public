@@ -1,0 +1,26 @@
+We are providing an interactive web interface to view the TSLP
+data. The system is based on Grafana.
+
+To obtain an account on the system, please send an email to:
+manic-info@caida.org
+
+The publicly accessible view on Grafana provides two dashboards:
+
+1) "All links from VP network to neighbor network": This dashboard
+allows the user to select the VP network (network hosting our
+measurement vantage points), and a neighbor network ASN, and displays
+latencies from each VP in the selected VP network to each interdomain
+link with the neighbor network. We display the "far sides" of each
+observed interdomain link to minimize clutter on the graph. By default
+the graph shows the last 7 days. It is possible to zoom in to specific
+time ranges of interest using the selection menus at the top.
+
+2) "Individual links from VP network to neighbor network": This
+dashboard allows the user to select the VP network (network hosting
+our measurement vantage points), a specific monitor within the
+network, a neighbor network ASN, and the specific interdomain link as
+represented by the far-side IP address. The plot then displays the
+latency from the selected monitor towards both sides of the
+interdomain link. By default the graph shows the last 7 days. It is
+possible to zoom in to specific time ranges of interest using the
+selection menus at the top.
