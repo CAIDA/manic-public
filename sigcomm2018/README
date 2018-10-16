@@ -1,0 +1,44 @@
+ytcongest.go
+ - Generate cong.csv, ncong.csv for YouTube analysis
+ - Require access to Manic Influxdb, manicinflux go library, and beamer://project/comcast-ping/kabir-plots/loss_data/ddc_periods/
+ - Execute: go run ytcongest.go
+
+validsample.pl
+ - Generate validdata.csv for YouTube analysis
+ - Require access to beamer://project/comcast-ping/kabir-plots/loss_data/supplemental_data/ddc/
+ - Execute: perl validsample.pl
+
+genpdf_congestion_windows.py
+ - Generate pdf of congestion windows for links from a VP
+ - Require access to beamer://project/comcast-ping/gautam-cw
+ - Execute: python genpdf_congestion_windows.py VP files_with_congestion_windows_from_VP
+
+get_ndt_means.py
+ - Generate results for NDT tests for congested and uncongested periods
+ - Require access to beamer://project/comcast-ping/gautam-cw
+ - Execute: python get_ndt_means.py file_congestion_window
+ - Assumption: Certain assumptions are made about the name of the file. Namely, that it has the VP, link in the name.
+
+oneoff_loss_plotter.py
+ - Generates Figure 3 (loss and latency correlation)
+ - Reads latency data to both the far and near end, loss data to both the far and near end, and inferred congestion windows
+ - Required files in /data
+
+Table 1 (multiple scripts below)
+ - query_and_analysis.py **creates influx queries using links that pass the far-end test only**
+ - querying_ddc_assertions_loss.py **runs influx queries and writes to newtestlosssig.csv file (a copy of which is also included in /data). NOTE: please ask us (amogh@caida.org) for credentials to query InfluxDB**
+ - finaltablecount.py **computes final table count**
+
+oneoff_ndt.py
+ - Generates Figure 6
+ - Reads NDT Download Throughput, latency data to both the far and near end, and inferred congestion windows
+ - Required files in /data
+
+Table 4 (multiple scripts/files below)
+ - Requires access to beamer.caida.org:/project/comcast-ping/kabir-plots/
+ - run_merged_queries.py **feeds the parameters ("far", "nasn" and "asn") to the next script. OTE: please ask us (amogh@caida.org) for credentials to query InfluxDB**
+ - querying_merged_assertions.py **runs actual queries and puts them in a file per access network**
+ - parsing_assertions_access_transit_content.py **Reads allmonitors_all_access.csv and produces the numbers in Table 4**
+
+parsing_assertions_access_transit_content.py
+ - Generates the numbers in Table 1 (needs minor computation on the csv output)
