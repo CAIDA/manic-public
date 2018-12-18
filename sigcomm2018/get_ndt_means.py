@@ -5,6 +5,22 @@ from datetime import datetime
 from influxdb import InfluxDBClient
 from scipy import stats
 
+# NOTES
+# get_ndt_means.py
+# What does this file do?
+# - Generate results for NDT tests for congested and uncongested periods
+# What do you need access to?
+#    - Require access to beamer://project/comcast-ping/gautam-cw
+#    - The files contain congestion windows for different links as seen from different VP
+# How does it do this?
+#    - We have a start and end date that is hard coded in epoch seconds
+#    - From the files we find all the congestion intervals
+#    - Get all data points for the NDT tests
+#    - Bucket data points into congested and uncongested based on congestion intervals
+#    - Get Stats for congested and uncongested intervals
+# How to run this?
+#    - Execute: python get_ndt_means.py file_congestion_window
+#    - Assumption: Certain assumptions are made about the name of the file. Namely, that it has the VP, link in the name.
 
 def diff_from_unix_epoch(ts):
     diff = datetime.strptime(str(ts), "%Y-%m-%dT%H:%M:%SZ") - datetime(1970,1,1)
@@ -25,7 +41,7 @@ def is_congested_interval(timestamp, intervals):
 # Step 1: Decide start and end point in epoch seconds
 # Step 2: Find all congestion intervals
 # Step 3: Get all data points from ndt tests
-# Step 4: Get mean/max/min for congestion interval and uncongested intervals
+# Step 4: Get mean/max/min for congested interval and uncongested intervals
 
 client = InfluxDBClient('localhost', 0, '', '', '', ssl=True)
 

@@ -3,6 +3,30 @@ from collections import defaultdict
 import sys
 import datetime
 
+# NOTES
+# genpdf_congestion_windows.py
+# What does this file do?
+#    - Generate pdf of congestion windows for links from a VP
+# What do you need access to?
+#    - Require access to beamer://project/comcast-ping/gautam-cw
+#    - The files contain congestion windows for different links as seen from different VP
+# How does it do this?
+#    - At a high level we take all of the congestion windows and bin them based on the hour.
+#    - For the paper, we bin them based on hour and weekend or weekday
+#    - There is commented code that you can use to bin based on hour and day of the week
+# How to run this?
+#    - Execute: python genpdf_congestion_windows.py VP files_with_congestion_windows_from_VP
+#    - VP stands for vantage points. The paper has a graph for VP bed-us
+#    - We have data for many vantage points - las-us, atl2-us
+#    - If you wanted to recreate the data for the paper you would run the following
+#    - python genpdf_congestion_windows.py bed-us /path/to/files/bed-us.*
+#    - The input files in this case are *all links* seen from bed-us VP
+#    - Make sure that the VP and input files match
+# Why do we need the VP?
+#    - We want to make sure that we get the pdf based on local time
+#    - So knowing the VP allows us to build pdf based of the right time zone
+
+
 def diff_from_unix_epoch(ts):
     diff = datetime.datetime.strptime(str(ts), "%Y-%m-%dT%H:%M:%SZ") - datetime.datetime(1970,1,1)
     return int(diff.total_seconds())
