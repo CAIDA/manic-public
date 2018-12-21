@@ -1,5 +1,36 @@
 package main
 
+/*
+This script is for retrieving the YouTube streaming performance from the InfluxDB for congested/non-congested time periods.
+Require access to beamer.caida.org:/project/comcast-ping/kabir-plots/loss_data/ddc_periods/ and MANIC InfluxDB
+
+The results will be written to two CSV files cong.csv and noncong.csv.
+
+The columns of output files are as follows:
+1.time - the measurement timestamp
+2.ArkMon - the Ark monitor that measure the interdomain link
+3.Mon - the Ark/Samknows monitors that measure the YouTube performance
+4.FarIP - the Far IP of the interdomain link
+5.Error - Error code reported by the YouTube test
+6.Abitrate - Audio bitrate of the downloaded video in the YouTube test
+7.Bytessec - The overall video download throughput 
+8.Ddur - The total download duration in the YouTube test
+9.FarRtt - The RTT from the monitor to the Far IP measured in the YouTube test
+10.Maxbitrate - The maximum video bitrate
+11.Predur - The prebuffering duration (start-up delay + 3 seconds of video)
+12.Sevt - Number of stalling event
+13.Stdelay - Video start-up delay
+14.Stotal - The total stalling time
+15.Success - Indicate if the test was success
+16.Vbitrate - The video bitrate of the downloaded video
+17.Vconnect - The 3WHS time between the monitor and the YouTube video cache
+18.Vserver - The IP of the video cache
+19.Vth - The average video download rate
+20.Webconnect - The 3WHS time between the monitor and the YouTube front-end website
+21.Vbyte - The total number of bytes of downloaded video data 
+22.Abyte - The total number of bytes of downloaded audio data 
+
+*/
 import (
 	"errors"
 	"fmt"
@@ -66,7 +97,7 @@ func convts(t string) time.Time {
 	return time.Unix(tsint, 0)
 }
 */
-
+//read the files for the beginning/ the end of congested time period
 func readCongestionDir(dir string) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
